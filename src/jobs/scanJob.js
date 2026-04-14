@@ -6,7 +6,7 @@ const runScanJob = async () => {
     console.log("[ScanJob] Starting market scan...");
 
     const result = await scanMarket({
-      symbols: ["XAUUSD"],
+      symbols: ["XAUUSD", "EURUSD"],
       timeframe: "15m",
       candleLimit: 250,
       minimumConfidence: 65,
