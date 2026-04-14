@@ -1,0 +1,27 @@
+const SUPPORTED_SYMBOLS = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD"];
+const SUPPORTED_TIMEFRAMES = ["5m", "15m", "30m", "1h", "4h"];
+
+const SYMBOL_TO_OANDA_INSTRUMENT = {
+  EURUSD: "EUR_USD",
+  GBPUSD: "GBP_USD",
+  USDJPY: "USD_JPY",
+  XAUUSD: "XAU_USD",
+  // USDCAD: "USD_CAD",
+  // AUDUSD: "AUD_USD",
+  // USDCHF: "USD_CHF",
+};
+
+const TIMEFRAME_TO_OANDA_GRANULARITY = {
+  "5m": "M5",
+  "15m": "M15",
+  "30m": "M30",
+  "1h": "H1",
+  "4h": "H4",
+};
+
+module.exports = {
+  SUPPORTED_SYMBOLS,
+  SUPPORTED_TIMEFRAMES,
+  SYMBOL_TO_OANDA_INSTRUMENT,
+  TIMEFRAME_TO_OANDA_GRANULARITY,
+};
