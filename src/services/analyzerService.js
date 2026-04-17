@@ -3,6 +3,28 @@ const { calculateIndicators } = require("./indicatorService");
 const { analyzeMarketStructure } = require("./marketStructureService");
 const { generateSignal } = require("./strategyService");
 
+const getClosedCandles = (candles) => {
+  if (!Array.isArray(candles) || candles.length < 2) {
+    throw new Error("At least 2 candles are required to analyze closed candles");
+  }
+
+  const closedCandles = candles.slice(0, -1);
+  const formingCandle = candles[candles.length - 1];
+  const latestClosedCandle = closedCandles[closedCandles.length - 1];
+
+  if (closedCandles.length < 200) {
+    throw new Error(
+      "At least 200 closed candles are required to calculate indicators",
+    );
+  }
+
+  return {
+    closedCandles,
+    formingCandle,
+    latestClosedCandle,
+  };
+};
+
 const analyzeSingleTimeframeMarket = async ({
   symbol,
   timeframe = "15m",
@@ -17,12 +39,14 @@ const analyzeSingleTimeframeMarket = async ({
 
   const normalizedSymbol = symbol.toUpperCase();
 
-  const candles = await getCandles(normalizedSymbol, timeframe, candleLimit);
+  const candles = await getCandles(normalizedSymbol, timeframe, candleLimit + 1);
+  const { closedCandles, formingCandle, latestClosedCandle } =
+    getClosedCandles(candles);
 
-  const indicators = calculateIndicators(candles);
+  const indicators = calculateIndicators(closedCandles);
 
   const marketStructure = analyzeMarketStructure({
-    candles,
+    candles: closedCandles,
     indicators,
   });
 
@@ -36,9 +60,9 @@ const analyzeSingleTimeframeMarket = async ({
     try {
       currentMarketPrice = await getCurrentPrice(normalizedSymbol);
     } catch (error) {
-      // Fallback to latest candle close price
+      // Fallback to the latest closed candle price when live price is unavailable
       currentMarketPrice =
-        candles[candles.length - 1]?.close || marketStructure.currentPrice;
+        latestClosedCandle?.close || marketStructure.currentPrice;
     }
   }
 
@@ -50,14 +74,16 @@ const analyzeSingleTimeframeMarket = async ({
     minimumConfidence,
     currentMarketPrice,
     multiTimeframeConfirmation,
+    confirmationCandle: latestClosedCandle,
   });
 
   return {
     symbol: normalizedSymbol,
     timeframe,
     analyzedAt: new Date().toISOString(),
-    candleCount: candles.length,
-    latestCandle: candles[candles.length - 1],
+    candleCount: closedCandles.length,
+    latestCandle: latestClosedCandle,
+    formingCandle,
     indicators,
     marketStructure,
     multiTimeframeConfirmation,

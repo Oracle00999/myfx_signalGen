@@ -1,7 +1,10 @@
 const RISK_REWARD_RATIO = 3;
 const ENTRY_TOLERANCE_MULTIPLIER = 0.2;
+const ZONE_DISTANCE_TOLERANCE_MULTIPLIER = 0.5;
+const BASE_CONFIDENCE = 50;
 
 const roundPrice = (value) => Number(value.toFixed(5));
+const clampConfidence = (value) => Math.max(0, Math.min(100, Math.round(value)));
 
 const calculateBuyLevels = (entry, atr) => {
   const risk = atr;
@@ -24,6 +27,151 @@ const calculateSellLevels = (entry, atr) => {
 };
 
 const getEntryTolerance = (atr) => atr * ENTRY_TOLERANCE_MULTIPLIER;
+const getZoneDistanceTolerance = (atr) =>
+  atr * ZONE_DISTANCE_TOLERANCE_MULTIPLIER;
+const getDirectionalZone = (signalType, marketStructure) =>
+  signalType === "BUY"
+    ? marketStructure.supportZone
+    : marketStructure.resistanceZone;
+
+const isAlignmentForSignal = (signalType, alignment) =>
+  (signalType === "BUY" && alignment === "BULLISH_ALIGNED") ||
+  (signalType === "SELL" && alignment === "BEARISH_ALIGNED");
+
+const isRsiInContinuationRange = (signalType, rsi) =>
+  signalType === "BUY" ? rsi >= 45 && rsi <= 60 : rsi >= 40 && rsi <= 55;
+
+const isRsiTooExtended = (signalType, rsi) =>
+  signalType === "BUY" ? rsi > 65 : rsi < 35;
+
+const isPriceRespectingZone = (signalType, marketStructure) =>
+  signalType === "BUY"
+    ? marketStructure.currentPrice >= marketStructure.supportZone.mid
+    : marketStructure.currentPrice <= marketStructure.resistanceZone.mid;
+
+const getZoneDistance = (price, zone) => Math.abs(price - zone.mid);
+
+const buildConfidenceScore = ({
+  signalType,
+  indicators,
+  marketStructure,
+  executionPrice,
+}) => {
+  let confidence = BASE_CONFIDENCE;
+  const reasons = [];
+  const zone = getDirectionalZone(signalType, marketStructure);
+  const priceDistanceFromZone = getZoneDistance(executionPrice, zone);
+  const zoneDistanceTolerance = getZoneDistanceTolerance(indicators.atr);
+
+  if (isAlignmentForSignal(signalType, marketStructure.alignment)) {
+    confidence += 15;
+    reasons.push("Trend and structure are aligned");
+  } else if (marketStructure.alignment === "CONFLICT") {
+    confidence -= 20;
+    reasons.push("Trend and structure are conflicting");
+  }
+
+  if (zone?.strong && priceDistanceFromZone <= zoneDistanceTolerance) {
+    confidence += 10;
+    reasons.push("Price is positioned near a strong zone");
+  } else if (priceDistanceFromZone > zoneDistanceTolerance) {
+    confidence -= 10;
+    reasons.push(
+      `Price is ${roundPrice(priceDistanceFromZone)} away from the zone which exceeds the ATR tolerance`,
+    );
+  }
+
+  if (isRsiInContinuationRange(signalType, indicators.rsi)) {
+    confidence += 10;
+    reasons.push("RSI is in a continuation range");
+  }
+
+  if (isPriceRespectingZone(signalType, marketStructure)) {
+    confidence += 10;
+    reasons.push(
+      signalType === "BUY"
+        ? "Price is holding above support"
+        : "Price is holding below resistance",
+    );
+  }
+
+  if (marketStructure.structure === "RANGING_STRUCTURE") {
+    confidence -= 10;
+    reasons.push("Market structure is ranging");
+  }
+
+  if (isRsiTooExtended(signalType, indicators.rsi)) {
+    confidence -= 10;
+    reasons.push(
+      signalType === "BUY"
+        ? "RSI is too high for a buy"
+        : "RSI is too low for a sell",
+    );
+  }
+
+  return {
+    confidence: clampConfidence(confidence),
+    reasons,
+  };
+};
+
+const getCandleMetrics = (candle) => {
+  const open = Number(candle.open);
+  const close = Number(candle.close);
+  const high = Number(candle.high);
+  const low = Number(candle.low);
+  const body = Math.abs(close - open);
+  const range = Math.max(high - low, 0);
+  const effectiveBody = Math.max(body, range * 0.1, Number.EPSILON);
+  const upperWick = Math.max(high - Math.max(open, close), 0);
+  const lowerWick = Math.max(Math.min(open, close) - low, 0);
+
+  return {
+    open,
+    close,
+    effectiveBody,
+    upperWick,
+    lowerWick,
+  };
+};
+
+const validateConfirmationCandle = ({ signalType, candle }) => {
+  if (!candle) {
+    return {
+      valid: false,
+      reason: "Missing last closed candle confirmation",
+    };
+  }
+
+  const metrics = getCandleMetrics(candle);
+  const strongBearishRejection =
+    metrics.close <= metrics.open &&
+    metrics.upperWick >= metrics.effectiveBody * 2 &&
+    metrics.upperWick > metrics.lowerWick;
+  const strongBullishRejection =
+    metrics.close >= metrics.open &&
+    metrics.lowerWick >= metrics.effectiveBody * 2 &&
+    metrics.lowerWick > metrics.upperWick;
+
+  if (signalType === "BUY" && strongBearishRejection) {
+    return {
+      valid: false,
+      reason: "Last closed candle shows strong bearish rejection",
+    };
+  }
+
+  if (signalType === "SELL" && strongBullishRejection) {
+    return {
+      valid: false,
+      reason: "Last closed candle shows strong bullish rejection",
+    };
+  }
+
+  return {
+    valid: true,
+    reason: "Last closed candle confirms the setup",
+  };
+};
 
 const determineBuyEntry = ({ marketStructure, executionPrice, atr }) => {
   const idealEntry = marketStructure.supportZone.mid;
@@ -42,7 +190,8 @@ const determineBuyEntry = ({ marketStructure, executionPrice, atr }) => {
   return {
     entryType: "BUY_LIMIT",
     entryPrice: idealEntry,
-    reason: "Current price is extended above support; using support midpoint as buy limit entry",
+    reason:
+      "Current price is extended above support; using support midpoint as buy limit entry",
   };
 };
 
@@ -66,86 +215,6 @@ const determineSellEntry = ({ marketStructure, executionPrice, atr }) => {
     entryPrice: idealEntry,
     reason:
       "Current price is extended below resistance; using resistance midpoint as sell limit entry",
-  };
-};
-
-const scoreBuySetup = ({ indicators, marketStructure }) => {
-  let confidence = 0;
-  const reasons = [];
-
-  if (marketStructure.trend === "BULLISH") {
-    confidence += 20;
-    reasons.push("Trend is bullish");
-  }
-
-  if (marketStructure.structure === "UPTREND_STRUCTURE") {
-    confidence += 15;
-    reasons.push("Market structure supports upside continuation");
-  }
-
-  if (marketStructure.nearSupport) {
-    confidence += 25;
-    reasons.push("Price is near support zone");
-  }
-
-  if (indicators.rsi < 65) {
-    confidence += 15;
-    reasons.push("RSI is not overheated for a buy");
-  }
-
-  if (indicators.rsi >= 45 && indicators.rsi <= 60) {
-    confidence += 10;
-    reasons.push("RSI is in a favorable continuation range");
-  }
-
-  if (marketStructure.currentPrice > marketStructure.supportZone.mid) {
-    confidence += 5;
-    reasons.push("Price is holding above support midpoint");
-  }
-
-  return {
-    confidence,
-    reasons,
-  };
-};
-
-const scoreSellSetup = ({ indicators, marketStructure }) => {
-  let confidence = 0;
-  const reasons = [];
-
-  if (marketStructure.trend === "BEARISH") {
-    confidence += 20;
-    reasons.push("Trend is bearish");
-  }
-
-  if (marketStructure.structure === "DOWNTREND_STRUCTURE") {
-    confidence += 15;
-    reasons.push("Market structure supports downside continuation");
-  }
-
-  if (marketStructure.nearResistance) {
-    confidence += 25;
-    reasons.push("Price is near resistance zone");
-  }
-
-  if (indicators.rsi > 35) {
-    confidence += 15;
-    reasons.push("RSI is not exhausted for a sell");
-  }
-
-  if (indicators.rsi >= 40 && indicators.rsi <= 55) {
-    confidence += 10;
-    reasons.push("RSI is in a favorable continuation range");
-  }
-
-  if (marketStructure.currentPrice < marketStructure.resistanceZone.mid) {
-    confidence += 5;
-    reasons.push("Price is holding below resistance midpoint");
-  }
-
-  return {
-    confidence,
-    reasons,
   };
 };
 
@@ -194,6 +263,7 @@ const generateSignal = ({
   minimumConfidence = 65,
   currentMarketPrice,
   multiTimeframeConfirmation = null,
+  confirmationCandle = null,
 }) => {
   if (!symbol) throw new Error("Symbol is required");
   if (
@@ -205,14 +275,6 @@ const generateSignal = ({
   }
   if (!marketStructure || typeof marketStructure.currentPrice !== "number") {
     throw new Error("Valid market structure is required");
-  }
-
-  if (marketStructure.alignment === "CONFLICT") {
-    return {
-      valid: false,
-      signal: null,
-      reasons: ["Trend and structure are not aligned"],
-    };
   }
 
   if (marketStructure.zonesOverlap) {
@@ -238,30 +300,44 @@ const generateSignal = ({
   const setupPrice = marketStructure.currentPrice;
   const executionPrice =
     typeof currentMarketPrice === "number" ? currentMarketPrice : setupPrice;
-
   const buyConditionsMet =
-    marketStructure.trend === "BULLISH" &&
-    marketStructure.structure === "UPTREND_STRUCTURE" &&
-    marketStructure.nearSupport &&
-    indicators.rsi < 65;
-
+    marketStructure.trend === "BULLISH" && marketStructure.nearSupport;
   const sellConditionsMet =
-    marketStructure.trend === "BEARISH" &&
-    marketStructure.structure === "DOWNTREND_STRUCTURE" &&
-    marketStructure.nearResistance &&
-    indicators.rsi > 35;
+    marketStructure.trend === "BEARISH" && marketStructure.nearResistance;
 
   if (buyConditionsMet) {
-    const { confidence, reasons } = scoreBuySetup({
+    const confidenceResult = buildConfidenceScore({
+      signalType: "BUY",
       indicators,
       marketStructure,
+      executionPrice,
     });
 
-    if (confidence < minimumConfidence) {
+    if (confidenceResult.confidence < minimumConfidence) {
       return {
         valid: false,
         signal: null,
-        reasons: ["BUY setup found but confidence below threshold", ...reasons],
+        reasons: [
+          `BUY setup found but confidence is ${confidenceResult.confidence}, below ${minimumConfidence}`,
+          ...confidenceResult.reasons,
+        ],
+      };
+    }
+
+    const confirmationCandleCheck = validateConfirmationCandle({
+      signalType: "BUY",
+      candle: confirmationCandle,
+    });
+
+    if (!confirmationCandleCheck.valid) {
+      return {
+        valid: false,
+        signal: null,
+        reasons: [
+          "BUY setup rejected by closed-candle confirmation",
+          confirmationCandleCheck.reason,
+          ...confidenceResult.reasons,
+        ],
       };
     }
 
@@ -277,7 +353,7 @@ const generateSignal = ({
         reasons: [
           "BUY setup rejected by multi-timeframe confirmation",
           confirmationCheck.reason,
-          ...reasons,
+          ...confidenceResult.reasons,
         ],
       };
     }
@@ -300,10 +376,11 @@ const generateSignal = ({
         entryType: entryDecision.entryType,
         status: entryDecision.entryType === "MARKET" ? "TRIGGERED" : "PENDING",
         ...tradeLevels,
-        confidence,
+        confidence: confidenceResult.confidence,
         reasons: [
-          ...reasons,
+          ...confidenceResult.reasons,
           entryDecision.reason,
+          confirmationCandleCheck.reason,
           ...(confirmationCheck.reason ? [confirmationCheck.reason] : []),
         ],
       },
@@ -311,18 +388,37 @@ const generateSignal = ({
   }
 
   if (sellConditionsMet) {
-    const { confidence, reasons } = scoreSellSetup({
+    const confidenceResult = buildConfidenceScore({
+      signalType: "SELL",
       indicators,
       marketStructure,
+      executionPrice,
     });
 
-    if (confidence < minimumConfidence) {
+    if (confidenceResult.confidence < minimumConfidence) {
       return {
         valid: false,
         signal: null,
         reasons: [
-          "SELL setup found but confidence below threshold",
-          ...reasons,
+          `SELL setup found but confidence is ${confidenceResult.confidence}, below ${minimumConfidence}`,
+          ...confidenceResult.reasons,
+        ],
+      };
+    }
+
+    const confirmationCandleCheck = validateConfirmationCandle({
+      signalType: "SELL",
+      candle: confirmationCandle,
+    });
+
+    if (!confirmationCandleCheck.valid) {
+      return {
+        valid: false,
+        signal: null,
+        reasons: [
+          "SELL setup rejected by closed-candle confirmation",
+          confirmationCandleCheck.reason,
+          ...confidenceResult.reasons,
         ],
       };
     }
@@ -339,7 +435,7 @@ const generateSignal = ({
         reasons: [
           "SELL setup rejected by multi-timeframe confirmation",
           confirmationCheck.reason,
-          ...reasons,
+          ...confidenceResult.reasons,
         ],
       };
     }
@@ -365,10 +461,11 @@ const generateSignal = ({
         entryType: entryDecision.entryType,
         status: entryDecision.entryType === "MARKET" ? "TRIGGERED" : "PENDING",
         ...tradeLevels,
-        confidence,
+        confidence: confidenceResult.confidence,
         reasons: [
-          ...reasons,
+          ...confidenceResult.reasons,
           entryDecision.reason,
+          confirmationCandleCheck.reason,
           ...(confirmationCheck.reason ? [confirmationCheck.reason] : []),
         ],
       },

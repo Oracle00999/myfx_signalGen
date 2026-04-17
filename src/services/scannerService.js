@@ -20,6 +20,7 @@ const scanMarket = async ({
   timeframe = "15m",
   candleLimit = 250,
   minimumConfidence = 65,
+  useMultiTimeframe = false,
 }) => {
   if (!Array.isArray(symbols) || symbols.length === 0) {
     throw new Error("Symbols array is required");
@@ -27,12 +28,13 @@ const scanMarket = async ({
 
   const results = [];
   const normalizedTimeframe = String(timeframe).toLowerCase();
-  const useMultiTimeframe = normalizedTimeframe === "15m";
+  const shouldUseMultiTimeframe =
+    useMultiTimeframe && normalizedTimeframe === "15m";
 
   const analyses = await Promise.all(
     symbols.map(async (symbol) => {
       try {
-        const multiTimeframeAnalysis = useMultiTimeframe
+        const multiTimeframeAnalysis = shouldUseMultiTimeframe
           ? await analyzeMultiTimeframe(symbol, {
               candleLimit,
               minimumConfidence,
