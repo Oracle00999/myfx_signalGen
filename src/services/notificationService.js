@@ -28,6 +28,9 @@ const formatSignalAlert = (signal) => {
     signal.entryType
       ? `Entry Type: *${escapeMarkdown(signal.entryType)}*`
       : null,
+    signal.entrySource
+      ? `Entry Source: *${escapeMarkdown(signal.entrySource)}*`
+      : null,
     signal.currentPrice
       ? `Current Price: *${escapeMarkdown(signal.currentPrice)}*`
       : null,

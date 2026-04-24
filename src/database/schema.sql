@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS signals (
     confidence INTEGER NOT NULL CHECK (confidence >= 0 AND confidence <= 100),
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING'
         CHECK (status IN ('PENDING', 'TRIGGERED', 'TP_HIT', 'SL_HIT', 'EXPIRED')),
+    entry_source VARCHAR(20)
+        CHECK (entry_source IN ('FVG', 'SUPPORT_ZONE', 'RESISTANCE_ZONE', 'MARKET')),
     source VARCHAR(20) NOT NULL
         CHECK (source IN ('AUTO', 'MANUAL')),
     timeframe VARCHAR(10) DEFAULT '15m',

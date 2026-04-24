@@ -4,6 +4,7 @@ const createSignal = async ({
   symbol,
   type,
   entryType = null,
+  entrySource = null,
   entry,
   stopLoss,
   takeProfit,
@@ -20,6 +21,7 @@ const createSignal = async ({
       symbol,
       type,
       entry_type,
+      entry_source,
       entry,
       stop_loss,
       take_profit,
@@ -31,7 +33,7 @@ const createSignal = async ({
       expires_at,
       analysis_snapshot
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
     RETURNING *;
   `;
 
@@ -39,6 +41,7 @@ const createSignal = async ({
     symbol,
     type,
     entryType,
+    entrySource,
     entry,
     stopLoss,
     takeProfit,
@@ -51,8 +54,51 @@ const createSignal = async ({
     analysisSnapshot,
   ];
 
-  const { rows } = await pool.query(query, values);
-  return rows[0];
+  try {
+    const { rows } = await pool.query(query, values);
+    return rows[0];
+  } catch (error) {
+    if (error.code !== "42703") {
+      throw error;
+    }
+
+    const fallbackQuery = `
+      INSERT INTO signals (
+        symbol,
+        type,
+        entry_type,
+        entry,
+        stop_loss,
+        take_profit,
+        confidence,
+        status,
+        source,
+        timeframe,
+        triggered_at,
+        expires_at,
+        analysis_snapshot
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      RETURNING *;
+    `;
+    const fallbackValues = [
+      symbol,
+      type,
+      entryType,
+      entry,
+      stopLoss,
+      takeProfit,
+      confidence,
+      status,
+      source,
+      timeframe,
+      triggeredAt,
+      expiresAt,
+      analysisSnapshot,
+    ];
+    const { rows } = await pool.query(fallbackQuery, fallbackValues);
+    return rows[0];
+  }
 };
 
 const getAllSignals = async () => {

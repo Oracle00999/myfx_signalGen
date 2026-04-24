@@ -1,5 +1,6 @@
 const { getCandles, getCurrentPrice } = require("./dataService");
 const { calculateIndicators } = require("./indicatorService");
+const { detectFairValueGaps } = require("./fvgService");
 const { analyzeMarketStructure } = require("./marketStructureService");
 const { generateSignal } = require("./strategyService");
 
@@ -32,6 +33,7 @@ const analyzeSingleTimeframeMarket = async ({
   minimumConfidence = 65,
   currentMarketPrice: providedCurrentMarketPrice,
   multiTimeframeConfirmation = null,
+  enableFvgEntry = true,
 }) => {
   if (!symbol) {
     throw new Error("Symbol is required");
@@ -66,6 +68,12 @@ const analyzeSingleTimeframeMarket = async ({
     }
   }
 
+  const fvgContext = detectFairValueGaps({
+    candles: closedCandles,
+    atr: indicators.atr,
+    currentPrice: currentMarketPrice,
+  });
+
   const signalResult = generateSignal({
     symbol: normalizedSymbol,
     timeframe,
@@ -75,6 +83,7 @@ const analyzeSingleTimeframeMarket = async ({
     currentMarketPrice,
     multiTimeframeConfirmation,
     confirmationCandle: latestClosedCandle,
+    fvgContext: enableFvgEntry ? fvgContext : null,
   });
 
   return {
@@ -86,6 +95,7 @@ const analyzeSingleTimeframeMarket = async ({
     formingCandle,
     indicators,
     marketStructure,
+    fvgContext,
     multiTimeframeConfirmation,
     signal: signalResult.signal,
     validSignal: signalResult.valid,

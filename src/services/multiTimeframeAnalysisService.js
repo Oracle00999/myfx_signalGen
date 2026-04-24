@@ -205,6 +205,7 @@ const analyzeMultiTimeframe = async (
     candleLimit,
     minimumConfidence,
     currentMarketPrice,
+    enableFvgEntry: false,
   };
 
   const [higherTimeframe, middleTimeframe] = await Promise.all([

@@ -31,6 +31,7 @@ const scanSingleMarket = async (req, res) => {
         analysisSnapshot: {
           indicators: analysis.indicators,
           structure: analysis.marketStructure,
+          fvgContext: analysis.fvgContext,
           latestCandle: analysis.latestCandle,
           reasons: analysis.reasons,
         },
@@ -47,6 +48,7 @@ const scanSingleMarket = async (req, res) => {
           currentPrice: analysis.signal.currentPrice,
           entry: analysis.signal.entry,
           entryType: analysis.signal.entryType,
+          entrySource: analysis.signal.entrySource,
           status: analysis.signal.status,
           stopLoss: analysis.signal.stopLoss,
           takeProfit: analysis.signal.takeProfit,
@@ -64,6 +66,7 @@ const scanSingleMarket = async (req, res) => {
       validSignal: analysis.validSignal,
       signal: signalResponse,
       indicators: analysis.indicators,
+      fvgContext: analysis.fvgContext,
       marketStructure: {
         trend: analysis.marketStructure.trend,
         structure: analysis.marketStructure.structure,

@@ -123,6 +123,7 @@ const formatAnalysisReply = (analysis, savedSignal = null) => {
     `TP: ${analysis.signal.takeProfit}`,
     `Confidence: ${analysis.signal.confidence}`,
     `Entry Type: ${analysis.signal.entryType || "N/A"}`,
+    `Entry Source: ${analysis.signal.entrySource || "N/A"}`,
     `Current Price: ${analysis.signal.currentPrice || analysis.marketStructure.currentPrice}`,
     saveLine,
     "",
@@ -187,6 +188,7 @@ const formatMultiTimeframeReply = (
     `TP: ${entryAnalysis.signal.takeProfit}`,
     `Confidence: ${entryAnalysis.signal.confidence}`,
     `Entry Type: ${entryAnalysis.signal.entryType || "N/A"}`,
+    `Entry Source: ${entryAnalysis.signal.entrySource || "N/A"}`,
     `Current Price: ${entryAnalysis.signal.currentPrice || entryAnalysis.marketStructure.currentPrice}`,
     saveLine,
     "",
@@ -225,6 +227,7 @@ const handleTelegramCommand = async (text) => {
         analysisSnapshot: {
           indicators: entryAnalysis.indicators,
           structure: entryAnalysis.marketStructure,
+          fvgContext: entryAnalysis.fvgContext,
           latestCandle: entryAnalysis.latestCandle,
           reasons: entryAnalysis.reasons,
           multiTimeframe: summarizeMultiTimeframeAnalysis(multiTimeframe),
@@ -254,6 +257,7 @@ const handleTelegramCommand = async (text) => {
       analysisSnapshot: {
         indicators: analysis.indicators,
         structure: analysis.marketStructure,
+        fvgContext: analysis.fvgContext,
         latestCandle: analysis.latestCandle,
         reasons: analysis.reasons,
       },

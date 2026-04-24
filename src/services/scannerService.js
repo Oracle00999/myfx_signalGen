@@ -84,6 +84,7 @@ const scanMarket = async ({
         analysisSnapshot: {
           indicators: analysis.indicators,
           structure: analysis.marketStructure,
+          fvgContext: analysis.fvgContext,
           multiTimeframe,
         },
       });

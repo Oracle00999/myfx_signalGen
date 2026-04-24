@@ -173,7 +173,21 @@ const validateConfirmationCandle = ({ signalType, candle }) => {
   };
 };
 
-const determineBuyEntry = ({ marketStructure, executionPrice, atr }) => {
+const determineBuyEntry = ({
+  marketStructure,
+  executionPrice,
+  atr,
+  fvgContext,
+}) => {
+  if (fvgContext?.bullish) {
+    return {
+      entryType: "BUY_LIMIT",
+      entrySource: "FVG",
+      entryPrice: fvgContext.bullish.mid,
+      reason: "Using bullish FVG midpoint as buy limit entry",
+    };
+  }
+
   const idealEntry = marketStructure.supportZone.mid;
   const tolerance = getEntryTolerance(atr);
   const closeEnough = Math.abs(executionPrice - idealEntry) <= tolerance;
@@ -182,6 +196,7 @@ const determineBuyEntry = ({ marketStructure, executionPrice, atr }) => {
   if (closeEnough || !shouldUseLimit) {
     return {
       entryType: "MARKET",
+      entrySource: "MARKET",
       entryPrice: executionPrice,
       reason: "Current price is close enough to support for market execution",
     };
@@ -189,13 +204,28 @@ const determineBuyEntry = ({ marketStructure, executionPrice, atr }) => {
 
   return {
     entryType: "BUY_LIMIT",
+    entrySource: "SUPPORT_ZONE",
     entryPrice: idealEntry,
     reason:
       "Current price is extended above support; using support midpoint as buy limit entry",
   };
 };
 
-const determineSellEntry = ({ marketStructure, executionPrice, atr }) => {
+const determineSellEntry = ({
+  marketStructure,
+  executionPrice,
+  atr,
+  fvgContext,
+}) => {
+  if (fvgContext?.bearish) {
+    return {
+      entryType: "SELL_LIMIT",
+      entrySource: "FVG",
+      entryPrice: fvgContext.bearish.mid,
+      reason: "Using bearish FVG midpoint as sell limit entry",
+    };
+  }
+
   const idealEntry = marketStructure.resistanceZone.mid;
   const tolerance = getEntryTolerance(atr);
   const closeEnough = Math.abs(executionPrice - idealEntry) <= tolerance;
@@ -204,6 +234,7 @@ const determineSellEntry = ({ marketStructure, executionPrice, atr }) => {
   if (closeEnough || !shouldUseLimit) {
     return {
       entryType: "MARKET",
+      entrySource: "MARKET",
       entryPrice: executionPrice,
       reason:
         "Current price is close enough to resistance for market execution",
@@ -212,6 +243,7 @@ const determineSellEntry = ({ marketStructure, executionPrice, atr }) => {
 
   return {
     entryType: "SELL_LIMIT",
+    entrySource: "RESISTANCE_ZONE",
     entryPrice: idealEntry,
     reason:
       "Current price is extended below resistance; using resistance midpoint as sell limit entry",
@@ -264,6 +296,7 @@ const generateSignal = ({
   currentMarketPrice,
   multiTimeframeConfirmation = null,
   confirmationCandle = null,
+  fvgContext = null,
 }) => {
   if (!symbol) throw new Error("Symbol is required");
   if (
@@ -362,8 +395,12 @@ const generateSignal = ({
       marketStructure,
       executionPrice,
       atr: indicators.atr,
+      fvgContext,
     });
-    const tradeLevels = calculateBuyLevels(entryDecision.entryPrice, indicators.atr);
+    const tradeLevels = calculateBuyLevels(
+      entryDecision.entryPrice,
+      indicators.atr,
+    );
 
     return {
       valid: true,
@@ -374,6 +411,7 @@ const generateSignal = ({
         setupPrice: roundPrice(setupPrice),
         currentPrice: roundPrice(executionPrice),
         entryType: entryDecision.entryType,
+        entrySource: entryDecision.entrySource,
         status: entryDecision.entryType === "MARKET" ? "TRIGGERED" : "PENDING",
         ...tradeLevels,
         confidence: confidenceResult.confidence,
@@ -444,6 +482,7 @@ const generateSignal = ({
       marketStructure,
       executionPrice,
       atr: indicators.atr,
+      fvgContext,
     });
     const tradeLevels = calculateSellLevels(
       entryDecision.entryPrice,
@@ -459,6 +498,7 @@ const generateSignal = ({
         setupPrice: roundPrice(setupPrice),
         currentPrice: roundPrice(executionPrice),
         entryType: entryDecision.entryType,
+        entrySource: entryDecision.entrySource,
         status: entryDecision.entryType === "MARKET" ? "TRIGGERED" : "PENDING",
         ...tradeLevels,
         confidence: confidenceResult.confidence,

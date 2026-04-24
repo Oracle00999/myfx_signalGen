@@ -12,6 +12,16 @@ const resolveStoredEntryType = (signal, fallbackEntryType = null) => {
   );
 };
 
+const resolveStoredEntrySource = (signal, fallbackEntrySource = null) => {
+  return (
+    signal?.entry_source ||
+    signal?.analysis_snapshot?.entrySource ||
+    signal?.entrySource ||
+    fallbackEntrySource ||
+    null
+  );
+};
+
 const calculateExpiry = () => {
   const now = new Date();
   return new Date(now.getTime() + EXPIRATION_HOURS * 60 * 60 * 1000);
@@ -22,6 +32,7 @@ const createSignalIfValid = async ({
   timeframe,
   type,
   entryType,
+  entrySource,
   entry,
   stopLoss,
   takeProfit,
@@ -43,6 +54,7 @@ const createSignalIfValid = async ({
       signal: {
         ...existing,
         entryType: resolveStoredEntryType(existing, entryType),
+        entrySource: resolveStoredEntrySource(existing, entrySource),
       },
     };
   }
@@ -53,12 +65,14 @@ const createSignalIfValid = async ({
   const persistedAnalysisSnapshot = {
     ...(analysisSnapshot || {}),
     entryType: entryType || null,
+    entrySource: entrySource || null,
   };
 
   const newSignal = await signalModel.createSignal({
     symbol,
     type,
     entryType,
+    entrySource,
     entry,
     stopLoss,
     takeProfit,
@@ -76,6 +90,7 @@ const createSignalIfValid = async ({
     signal: {
       ...newSignal,
       entryType: resolveStoredEntryType(newSignal, entryType),
+      entrySource: resolveStoredEntrySource(newSignal, entrySource),
     },
   };
 };
