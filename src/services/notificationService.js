@@ -13,6 +13,118 @@ const escapeMarkdown = (text = "") => {
 
 const hasMetric = (value) => value !== null && value !== undefined;
 
+const toNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+const roundMetric = (value) =>
+  Number.isFinite(value) ? Number(value.toFixed(2)) : null;
+
+const formatMetric = (value, digits = 2) => {
+  const number = toNumber(value);
+  if (number === null) return "N/A";
+  return number.toFixed(digits);
+};
+
+const getSnapshotMetric = (signal, key) => {
+  const snakeKey = key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+
+  return (
+    signal?.analysis_snapshot?.[key] ??
+    signal?.analysis_snapshot?.[snakeKey] ??
+    signal?.analysis_snapshot?.signal?.[key] ??
+    signal?.analysis_snapshot?.signal?.[snakeKey] ??
+    signal?.analysisSnapshot?.[key] ??
+    signal?.analysisSnapshot?.[snakeKey] ??
+    signal?.analysisSnapshot?.signal?.[key] ??
+    signal?.analysisSnapshot?.signal?.[snakeKey] ??
+    signal?.[key] ??
+    signal?.[snakeKey] ??
+    null
+  );
+};
+
+const getLifecycleMetrics = (signal) => {
+  const entry = toNumber(signal?.entry);
+  const stopLoss = toNumber(signal?.stop_loss ?? signal?.stopLoss);
+  const takeProfit = toNumber(signal?.take_profit ?? signal?.takeProfit);
+  const risk =
+    entry !== null && stopLoss !== null ? Math.abs(entry - stopLoss) : null;
+  const reward =
+    entry !== null && takeProfit !== null ? Math.abs(takeProfit - entry) : null;
+  const calculatedRiskPercent =
+    entry !== null && entry !== 0 && risk !== null
+      ? roundMetric((risk / Math.abs(entry)) * 100)
+      : null;
+  const calculatedRr =
+    risk !== null && risk !== 0 && reward !== null
+      ? roundMetric(reward / risk)
+      : null;
+
+  return {
+    rr: getSnapshotMetric(signal, "rr") ?? calculatedRr,
+    riskPercent:
+      getSnapshotMetric(signal, "riskPercent") ?? calculatedRiskPercent,
+  };
+};
+
+const formatSignalLifecycleAlert = (signal, status) => {
+  const isTpHit = status === "TP_HIT";
+  const isTriggered = status === "TRIGGERED";
+
+  if (!signal || (!isTriggered && !isTpHit && status !== "SL_HIT")) {
+    return null;
+  }
+
+  const metrics = getLifecycleMetrics(signal);
+  const stopLoss = signal.stop_loss ?? signal.stopLoss;
+  const takeProfit = signal.take_profit ?? signal.takeProfit;
+  const entryType = signal.entry_type ?? signal.entryType ?? "N/A";
+  const entrySource = signal.entry_source ?? signal.entrySource ?? "N/A";
+
+  if (isTriggered) {
+    return [
+      "🚀 SIGNAL TRIGGERED",
+      "",
+      `Symbol: ${signal.symbol}`,
+      `Timeframe: ${signal.timeframe}`,
+      `Type: ${signal.type}`,
+      `Entry: ${signal.entry}`,
+      `Stop Loss: ${stopLoss}`,
+      `Take Profit: ${takeProfit}`,
+      "",
+      `Entry Type: ${entryType}`,
+      `Entry Source: ${entrySource}`,
+      "",
+      "Stats:",
+      `RR: ${formatMetric(metrics.rr, 1)}`,
+      `Risk %: ${formatMetric(metrics.riskPercent, 2)}%`,
+      "",
+      `Signal ID: ${signal.id}`,
+    ].join("\n");
+  }
+
+  return [
+    isTpHit ? "🎯 TP HIT" : "🛑 SL HIT",
+    "",
+    `Symbol: ${signal.symbol}`,
+    `Timeframe: ${signal.timeframe}`,
+    `Type: ${signal.type}`,
+    `Entry: ${signal.entry}`,
+    isTpHit ? `Take Profit: ${takeProfit}` : `Stop Loss: ${stopLoss}`,
+    "",
+    "Result:",
+    isTpHit ? "+ Profit secured" : "- Trade invalidated",
+    "",
+    "Stats:",
+    `RR: ${formatMetric(metrics.rr, 1)}`,
+    `Risk %: ${formatMetric(metrics.riskPercent, 2)}%`,
+    "",
+    `Signal ID: ${signal.id}`,
+  ].join("\n");
+};
+
 const formatSignalAlert = (signal) => {
   const reasonsText =
     Array.isArray(signal.reasons) && signal.reasons.length > 0
@@ -103,6 +215,7 @@ const sendTelegramSignalAlert = async (signal) => {
 module.exports = {
   isTelegramConfigured,
   formatSignalAlert,
+  formatSignalLifecycleAlert,
   sendTelegramMessage,
   sendTelegramSignalAlert,
 };

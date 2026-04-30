@@ -92,6 +92,7 @@ const processSignal = async (signal) => {
           status: "TRIGGERED",
           previousStatus: "PENDING",
           changed: true,
+          signal,
         };
       }
 
@@ -108,6 +109,7 @@ const processSignal = async (signal) => {
           status: "TRIGGERED",
           previousStatus: "PENDING",
           changed: true,
+          signal,
         };
       }
 
@@ -133,6 +135,7 @@ const processSignal = async (signal) => {
           status: result,
           previousStatus: "TRIGGERED",
           changed: true,
+          signal,
         };
       }
 
