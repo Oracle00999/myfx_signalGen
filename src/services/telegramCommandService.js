@@ -12,6 +12,16 @@ const {
 
 const normalizeSymbol = (value = "") => value.trim().toUpperCase();
 const normalizeTimeframe = (value = "") => value.trim().toLowerCase();
+const hasMetric = (value) => value !== null && value !== undefined;
+
+const formatRiskMetricLines = (signal) =>
+  [
+    hasMetric(signal.risk) ? `Risk: ${signal.risk}` : null,
+    hasMetric(signal.reward) ? `Reward: ${signal.reward}` : null,
+    hasMetric(signal.rr) ? `RR: ${signal.rr}` : null,
+    hasMetric(signal.riskPercent) ? `Risk %: ${signal.riskPercent}%` : null,
+    hasMetric(signal.atrPercent) ? `ATR %: ${signal.atrPercent}%` : null,
+  ].filter(Boolean);
 
 const formatStatsReply = (stats) => {
   return [
@@ -121,6 +131,7 @@ const formatAnalysisReply = (analysis, savedSignal = null) => {
     `Entry: ${analysis.signal.entry}`,
     `SL: ${analysis.signal.stopLoss}`,
     `TP: ${analysis.signal.takeProfit}`,
+    ...formatRiskMetricLines(analysis.signal),
     `Confidence: ${analysis.signal.confidence}`,
     `Entry Type: ${analysis.signal.entryType || "N/A"}`,
     `Entry Source: ${analysis.signal.entrySource || "N/A"}`,
@@ -186,6 +197,7 @@ const formatMultiTimeframeReply = (
     `Entry: ${entryAnalysis.signal.entry}`,
     `SL: ${entryAnalysis.signal.stopLoss}`,
     `TP: ${entryAnalysis.signal.takeProfit}`,
+    ...formatRiskMetricLines(entryAnalysis.signal),
     `Confidence: ${entryAnalysis.signal.confidence}`,
     `Entry Type: ${entryAnalysis.signal.entryType || "N/A"}`,
     `Entry Source: ${entryAnalysis.signal.entrySource || "N/A"}`,

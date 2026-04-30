@@ -52,6 +52,12 @@ const scanSingleMarket = async (req, res) => {
           status: analysis.signal.status,
           stopLoss: analysis.signal.stopLoss,
           takeProfit: analysis.signal.takeProfit,
+          risk: analysis.signal.risk,
+          reward: analysis.signal.reward,
+          riskPercent: analysis.signal.riskPercent,
+          rewardPercent: analysis.signal.rewardPercent,
+          rr: analysis.signal.rr,
+          atrPercent: analysis.signal.atrPercent,
           confidence: analysis.signal.confidence,
           reasons: analysis.signal.reasons,
         }

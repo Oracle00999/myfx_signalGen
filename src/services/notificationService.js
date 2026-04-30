@@ -11,6 +11,8 @@ const escapeMarkdown = (text = "") => {
   return String(text).replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
 };
 
+const hasMetric = (value) => value !== null && value !== undefined;
+
 const formatSignalAlert = (signal) => {
   const reasonsText =
     Array.isArray(signal.reasons) && signal.reasons.length > 0
@@ -24,6 +26,17 @@ const formatSignalAlert = (signal) => {
     `Entry: *${escapeMarkdown(signal.entry)}*`,
     `Stop Loss: *${escapeMarkdown(signal.stopLoss)}*`,
     `Take Profit: *${escapeMarkdown(signal.takeProfit)}*`,
+    hasMetric(signal.risk) ? `Risk: *${escapeMarkdown(signal.risk)}*` : null,
+    hasMetric(signal.reward)
+      ? `Reward: *${escapeMarkdown(signal.reward)}*`
+      : null,
+    hasMetric(signal.rr) ? `RR: *${escapeMarkdown(signal.rr)}*` : null,
+    hasMetric(signal.riskPercent)
+      ? `Risk %: *${escapeMarkdown(`${signal.riskPercent}%`)}*`
+      : null,
+    hasMetric(signal.atrPercent)
+      ? `ATR %: *${escapeMarkdown(`${signal.atrPercent}%`)}*`
+      : null,
     `Confidence: *${escapeMarkdown(signal.confidence)}*`,
     signal.entryType
       ? `Entry Type: *${escapeMarkdown(signal.entryType)}*`

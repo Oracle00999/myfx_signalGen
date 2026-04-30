@@ -2,8 +2,29 @@ const RISK_REWARD_RATIO = 3;
 const ENTRY_TOLERANCE_MULTIPLIER = 0.2;
 const ZONE_DISTANCE_TOLERANCE_MULTIPLIER = 0.5;
 const BASE_CONFIDENCE = 50;
+const MIN_REWARD_TO_RISK = 2.5;
+const DEFAULT_MAX_RISK_PERCENT = 1.5;
+const DEFAULT_MAX_ATR_PERCENT = 0.8;
+
+const MAX_RISK_PERCENT_BY_TIMEFRAME = {
+  "5m": 0.8,
+  "15m": 1.5,
+  "30m": 2.0,
+  "1h": 2.5,
+  "4h": 4.0,
+};
+
+const MAX_ATR_PERCENT_BY_TIMEFRAME = {
+  "5m": 0.8,
+  "15m": 1.5,
+  "30m": 2.0,
+  "1h": 2.5,
+  "4h": 4.0,
+};
 
 const roundPrice = (value) => Number(value.toFixed(5));
+const roundMetric = (value) =>
+  Number.isFinite(value) ? Number(value.toFixed(2)) : value;
 const clampConfidence = (value) => Math.max(0, Math.min(100, Math.round(value)));
 
 const calculateBuyLevels = (entry, atr) => {
@@ -287,6 +308,96 @@ const validateMultiTimeframeConfirmation = ({
   };
 };
 
+const getTimeframeLimit = (limits, timeframe, fallback) => {
+  const normalizedTimeframe = String(timeframe || "").toLowerCase();
+  return limits[normalizedTimeframe] ?? fallback;
+};
+
+const calculateRiskMetrics = ({ entry, stopLoss, takeProfit, atr }) => {
+  const risk = Math.abs(entry - stopLoss);
+  const reward = Math.abs(takeProfit - entry);
+  const safeEntry = Math.abs(entry);
+
+  return {
+    risk: roundPrice(risk),
+    reward: roundPrice(reward),
+    riskPercent: roundMetric((risk / safeEntry) * 100),
+    rewardPercent: roundMetric((reward / safeEntry) * 100),
+    rr: roundMetric(reward / risk),
+    atrPercent: roundMetric((Math.abs(atr) / safeEntry) * 100),
+  };
+};
+
+const validateRiskControls = ({
+  timeframe,
+  entry,
+  stopLoss,
+  takeProfit,
+  atr,
+}) => {
+  const reasons = [];
+
+  if (
+    !Number.isFinite(entry) ||
+    !Number.isFinite(stopLoss) ||
+    !Number.isFinite(takeProfit) ||
+    !Number.isFinite(atr) ||
+    entry <= 0 ||
+    atr <= 0
+  ) {
+    return {
+      valid: false,
+      metrics: null,
+      reasons: [
+        "Invalid risk inputs; entry, SL, TP and ATR must be positive numbers",
+      ],
+    };
+  }
+
+  const metrics = calculateRiskMetrics({ entry, stopLoss, takeProfit, atr });
+
+  if (!Number.isFinite(metrics.rr) || metrics.risk <= 0 || metrics.reward <= 0) {
+    reasons.push(
+      "Invalid risk/reward distance; risk and reward must be greater than 0",
+    );
+  }
+
+  const normalizedTimeframe = String(timeframe || "").toLowerCase();
+  const displayTimeframe = normalizedTimeframe || "unknown timeframe";
+  const maxRiskPercent = getTimeframeLimit(
+    MAX_RISK_PERCENT_BY_TIMEFRAME,
+    normalizedTimeframe,
+    DEFAULT_MAX_RISK_PERCENT,
+  );
+  const maxAtrPercent = getTimeframeLimit(
+    MAX_ATR_PERCENT_BY_TIMEFRAME,
+    normalizedTimeframe,
+    DEFAULT_MAX_ATR_PERCENT,
+  );
+
+  if (metrics.riskPercent > maxRiskPercent) {
+    reasons.push(
+      `Risk too large for ${displayTimeframe}: ${metrics.riskPercent}% exceeds max ${maxRiskPercent}%`,
+    );
+  }
+
+  if (metrics.atrPercent > maxAtrPercent) {
+    reasons.push(
+      `ATR too large for timeframe: ${metrics.atrPercent}% exceeds max ${maxAtrPercent}%`,
+    );
+  }
+
+  if (metrics.rr < MIN_REWARD_TO_RISK) {
+    reasons.push(`Reward-to-risk too low: ${metrics.rr}`);
+  }
+
+  return {
+    valid: reasons.length === 0,
+    metrics,
+    reasons,
+  };
+};
+
 const generateSignal = ({
   symbol,
   timeframe = "15m",
@@ -401,6 +512,21 @@ const generateSignal = ({
       entryDecision.entryPrice,
       indicators.atr,
     );
+    const riskCheck = validateRiskControls({
+      timeframe,
+      entry: tradeLevels.entry,
+      stopLoss: tradeLevels.stopLoss,
+      takeProfit: tradeLevels.takeProfit,
+      atr: indicators.atr,
+    });
+
+    if (!riskCheck.valid) {
+      return {
+        valid: false,
+        signal: null,
+        reasons: riskCheck.reasons,
+      };
+    }
 
     return {
       valid: true,
@@ -414,6 +540,7 @@ const generateSignal = ({
         entrySource: entryDecision.entrySource,
         status: entryDecision.entryType === "MARKET" ? "TRIGGERED" : "PENDING",
         ...tradeLevels,
+        ...riskCheck.metrics,
         confidence: confidenceResult.confidence,
         reasons: [
           ...confidenceResult.reasons,
@@ -488,6 +615,21 @@ const generateSignal = ({
       entryDecision.entryPrice,
       indicators.atr,
     );
+    const riskCheck = validateRiskControls({
+      timeframe,
+      entry: tradeLevels.entry,
+      stopLoss: tradeLevels.stopLoss,
+      takeProfit: tradeLevels.takeProfit,
+      atr: indicators.atr,
+    });
+
+    if (!riskCheck.valid) {
+      return {
+        valid: false,
+        signal: null,
+        reasons: riskCheck.reasons,
+      };
+    }
 
     return {
       valid: true,
@@ -501,6 +643,7 @@ const generateSignal = ({
         entrySource: entryDecision.entrySource,
         status: entryDecision.entryType === "MARKET" ? "TRIGGERED" : "PENDING",
         ...tradeLevels,
+        ...riskCheck.metrics,
         confidence: confidenceResult.confidence,
         reasons: [
           ...confidenceResult.reasons,
